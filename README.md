@@ -74,7 +74,7 @@ Upon transfer, the WIF flag is set again, we return to the ISR. Instead, the nex
 Inside is code that runs if we are indeed in register address transfer stage (indeed we are). We check whether we got an ACK from the slave. If so, we can continue, else the program stops communication and gives up. 
 Continuing through ```if (!rxack)``` we need to check whether we are writing or reading, as both read and write register functions have to send a register address, but do different things afterwards. 
 Through the ```else``` condition, we continue on the writeRegister thread. 
-Here we cycle through code that overwrites the MDATA host register with the next-in-line data byte. Each time we increment the byteWriteCount. While transmitting the data bytes, the host exits out of the ISR and waits for the next WIF interrupt. Upon the next interrupt, the program returns to the same location, where it checks whether it has finished sending all the bytes. If not, then it sends the next, the cycle continues. Only when ```byteWriteCount``` equalling the ```numberBytes``` variable does it exit ````writeRegister``` and finish. Hence, it is important that ```numberBytes``` is given the correct value. 
+Here we cycle through code that overwrites the MDATA host register with the next-in-line data byte. Each time we increment the byteWriteCount. While transmitting the data bytes, the host exits out of the ISR and waits for the next WIF interrupt. Upon the next interrupt, the program returns to the same location, where it checks whether it has finished sending all the bytes. If not, then it sends the next, the cycle continues. Only when ```byteWriteCount``` equalling the ```numberBytes``` variable does it exit ```writeRegister``` and finish. Hence, it is important that ```numberBytes``` is given the correct value. 
 
 As you can see, if the program finds an error, it gives up without any automatic attempt to fix it, retry or indicate exactly what the error is. Consideration has been made to stop communication if errors occur, and the ```delay(500)``` ensures the program moves on regardless. 
 
@@ -101,6 +101,27 @@ else if (wif && I2CDev.stepz == 1){ //wif set, in register transmission mode
 
 does the ```if (!I2CDev.writing)``` condition break it away. Inside it writes MADDR host register with the slave address, but with MADDR[0] = 1. This sets the DIR bit, indicating the host intends to read from the slave. ```stepz=2```.
 After writing to MADDR, the WIF flag is cleared, the ISR exits and it waits for a new interrupt. Since DIR = 1, the next interrupt will be from the RIF. 
+
+The final if conditions consider the RIF when CLKHOLD == 1:
+
+```
+else if (rif && I2CDev.stepz == 2){
+    if (clkhold){
+```
+
+This is true if the slave has sent a byte to the host and is pending a response from the host. The byte read is stored in the hosts MDATA register. 
+
+The program stores the MDATA byte in the ```bufferData``` variable prior to transfer to the ```buff```. If the host needs more bytes, it sends an ACK to the slave, else it sends a NACK, indicating the end of the communication. On ACK, it exits out of the ISR and waits for the next RIF interrupt, where it again pulls from the MDATA register, storing it in the next byte of ```bufferData``` **.
+
+
+**: in the ```I2CHex.h``` file, ```bufferData``` is initialised as a 4 byte array, and hence can only store 4 bytes of slave data at a time. This is user configurable, along with the ```sizeData``` parameter, to allow for greater storage.
+
+
+
+
+
+
+
 
 
 
