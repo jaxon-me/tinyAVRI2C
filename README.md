@@ -4,25 +4,35 @@ This library allows I2C communication between a host tinyAVR microcontroller and
 
 This function writes to a register on the slave device. It does not do the typical read-write-modify sequence (future update), hence all bits of the register are overwritten. The function can only write a maximum of 4 bytes of data, excluding the slave and register address bytes. This is to conserve on memory but can be altered by the user.
 
-```saddr``` : 7 bit slave device address
+```saddr``` : 7 bit slave device address 
+
 ```regaddr```: register address
+
 ```val```: pointer of value buffer to be written (the data byte/s)
+
 ```sizeData```: number of data bytes to be written
+
+
+
 
 ```readRegister(uint8_t saddr, uint8_t regaddr, uint8_t numBytes, uint8_t* buff)```
 
 This function reads the value of a register and stores the byte/s of in a buffer.
 
 ```saddr```: 7 bit slave address
+
 ```regaddr```: register address
+
 ```numBytes```: number of bytes to read *
+
 ```buff```: pointer to the buffer storing the register bits
 
 
-*: numBytes should not exceed the specific register size
+
+*: ```numBytes``` should not exceed the specific register size
 
 
-Code explanation
+#Code explanation
 
 Calling ```begin()``` initialised the TWI peripheral, setting the baud rate, enabling interrupts, sets the microcontroller as host, and places the peripheral in IDLE mode. 
 
