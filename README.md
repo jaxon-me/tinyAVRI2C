@@ -42,7 +42,7 @@ Calling ```begin()``` initiates the TWI peripheral, setting the baud rate, enabl
 
 ```byteWriteCount```: keeps count of number of bytes written to slave and used to check for completion.
 
-```byteReadCount``: counts the number of bytes read from slave, used to check for completion.
+```byteReadCount```: counts the number of bytes read from slave, used to check for completion.
 
 ```res```: 0 means it's awaiting for a response, 1 means it successfully wrote/read all bytes to the slave, 2 means it received and NACK after sending slave data bytes (error), 3 means it missed an acknowledgement after sending slave address (error), 5 means it lost arbitration and 6 means it timed out without response. Call error cases are handled by stopping communication. 
 
@@ -56,6 +56,8 @@ Calling ```begin()``` initiates the TWI peripheral, setting the baud rate, enabl
 | stepz | 0 | 
 | byteWriteCount | 0 | 
  
+```TWI0.MADDR = (saddr << 1);```: MADDR[7:1] = slave address, MADDR[0] = direction bit = 0, indicating writing.
+
 
 
 
