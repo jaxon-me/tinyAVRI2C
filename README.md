@@ -38,7 +38,7 @@ Calling ```begin()``` initiates the TWI peripheral, setting the baud rate, enabl
 
 ** Variables used to keep track of location in data transmission: **
 
-```stepz```: 0 when writing slave address packet, 1 when writing the register address, 2 when sending or receiving data bytes. 
+```stepz```: 0 when writing slave address packet, 1 when writing the register address or the data bytes, 2 when receiving data bytes. 
 
 ```byteWriteCount```: keeps count of number of bytes written to slave and used to check for completion.
 
@@ -62,7 +62,7 @@ While it has not received a response (by default this is true), the host waits 5
 
 ### ISR code
 
-Once the host writes the MADDR to the slave, it sets a WIF flag, causing an interrupt. ```if (wif && I2CDev.stepz == 0)```` checks whether WIF flag is set and we are currently in the slave address write section. If true, then we have confirmed the device has sent the slave address. We know need to check for potential transmission/acknowledgement errors. There are 3 cases, case M1 is if there where no errors, M3 is if the host did not get an acknowledgement and M4 is if there was an arbitration or bus error. Only on M1 does the writeRegister function continue, else it just stops communication and gives up. 
+Once the host writes the MADDR to the slave, it sets a WIF flag, causing an interrupt. ```if (wif && I2CDev.stepz == 0)``` checks whether WIF flag is set and we are currently in the slave address write section. If true, then we have confirmed the device has sent the slave address. We now need to check for potential transmission/acknowledgement errors. There are 3 cases, case M1 is if there where no errors, M3 is if the host did not get an acknowledgement and M4 is if there was an arbitration or bus error. Only on M1 does the writeRegister function continue, else it just stops communication and gives up. 
 
 If M1, found via: ```if (clkhold && !rxack)```: 
 
@@ -71,8 +71,36 @@ If M1, found via: ```if (clkhold && !rxack)```:
 For a short period while the register address is being transferred, the ISR is no longer running and the device returns to waiting. 
 
 Upon transfer, the WIF flag is set again, we return to the ISR. Instead, the next if condition is satisfied: ```else if (wif && I2CDev.stepz == 1)```. 
-Inside is code that runs if we are indeed in register address transfer stage (indeed we are). 
+Inside is code that runs if we are indeed in register address transfer stage (indeed we are). We check whether we got an ACK from the slave. If so, we can continue, else the program stops communication and gives up. 
+Continuing through ```if (!rxack)``` we need to check whether we are writing or reading, as both read and write register functions have to send a register address, but do different things afterwards. 
+Through the ```else``` condition, we continue on the writeRegister thread. 
+Here we cycle through code that overwrites the MDATA host register with the next-in-line data byte. Each time we increment the byteWriteCount. While transmitting the data bytes, the host exits out of the ISR and waits for the next WIF interrupt. Upon the next interrupt, the program returns to the same location, where it checks whether it has finished sending all the bytes. If not, then it sends the next, the cycle continues. Only when ```byteWriteCount``` equalling the ```numberBytes``` variable does it exit ````writeRegister``` and finish. Hence, it is important that ```numberBytes``` is given the correct value. 
 
+As you can see, if the program finds an error, it gives up without any automatic attempt to fix it, retry or indicate exactly what the error is. Consideration has been made to stop communication if errors occur, and the ```delay(500)``` ensures the program moves on regardless. 
+
+## readRegister 
+
+| Variable | Initial Value | 
+| -------- | ------|
+| writing | 0 |
+| stepz | 0 | 
+| byteReadCount | 0 |
+
+For the slave address and register address transmission sections, it shares code with writeRegister. Only after confirming the register address was sent does it deviate. 
+
+The starter code ```TWI0.MADDR = (saddr << 1);``` is the same as what is used in the writeRegister, causing shared ISR behaviour. 
+
+### ISR code
+
+After sending the register address and checking for errors
+```
+else if (wif && I2CDev.stepz == 1){ //wif set, in register transmission mode
+    if (!rxack){
+
+```
+
+does the ```if (!I2CDev.writing)``` condition break it away. Inside it writes MADDR host register with the slave address, but with MADDR[0] = 1. This sets the DIR bit, indicating the host intends to read from the slave. ```stepz=2```.
+After writing to MADDR, the WIF flag is cleared, the ISR exits and it waits for a new interrupt. Since DIR = 1, the next interrupt will be from the RIF. 
 
 
 
