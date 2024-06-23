@@ -58,6 +58,21 @@ Calling ```begin()``` initiates the TWI peripheral, setting the baud rate, enabl
  
 ```TWI0.MADDR = (saddr << 1);```: MADDR[7:1] = slave address, MADDR[0] = direction bit = 0, indicating writing.
 
+While it has not received a response (by default this is true), the host waits 500ms. During this time, interrupts can occur which will hopefully give a response. If not, then a timeout response is returned. 
+
+### ISR code
+
+Once the host writes the MADDR to the slave, it sets a WIF flag, causing an interrupt. ```if (wif && I2CDev.stepz == 0)```` checks whether WIF flag is set and we are currently in the slave address write section. If true, then we have confirmed the device has sent the slave address. We know need to check for potential transmission/acknowledgement errors. There are 3 cases, case M1 is if there where no errors, M3 is if the host did not get an acknowledgement and M4 is if there was an arbitration or bus error. Only on M1 does the writeRegister function continue, else it just stops communication and gives up. 
+
+If M1, found via: ```if (clkhold && !rxack)```: 
+
+```TWI0.MDATA = I2CDev.regAddr``` writes the register address packet to the host. This automatically initiates data transmission and clears the interrupt flag. ```stepz = 1```.
+
+For a short period while the register address is being transferred, the ISR is no longer running and the device returns to waiting. 
+
+Upon transfer, the WIF flag is set again, we return to the ISR. Instead, the next if condition is satisfied: ```else if (wif && I2CDev.stepz == 1)```. 
+Inside is code that runs if we are indeed in register address transfer stage (indeed we are). 
+
 
 
 
