@@ -34,7 +34,7 @@ This function reads the value of a register and stores the byte/s of in a buffer
 
 # Code explanation
 
-Calling ```begin()``` initialised the TWI peripheral, setting the baud rate, enabling interrupts, sets the microcontroller as host, and places the peripheral in IDLE mode. 
+Calling ```begin()``` initiates the TWI peripheral, setting the baud rate, enabling interrupts, sets the microcontroller as host, and places the peripheral in IDLE mode. 
 
 ** Variables used to keep track of location in data transmission: **
 
@@ -49,6 +49,13 @@ Calling ```begin()``` initialised the TWI peripheral, setting the baud rate, ena
 ```writing```: Boolean indicating whether it is writing to the slave or reading. 
 
 ## writeRegister
+
+| Variable | Initial Value | 
+| -------- | ------|
+| writing | 1 |
+| stepz | 0 | 
+| byteWriteCount | 0 | 
+ 
 
 
 
