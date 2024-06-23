@@ -1,6 +1,6 @@
 This library allows I2C communication between a host tinyAVR microcontroller and a slave device. It sacrifices rigorous error handling and cross compatibility for memory improvements, suited for lower memory models. It has two pre-programmed functions: writeRegister and readRegister.
 
-writeRegister(uint8_t saddr, uint8_t regaddr, uint8_t* val, uint8_t sizeData)
+**writeRegister(uint8_t saddr, uint8_t regaddr, uint8_t* val, uint8_t sizeData)
 
 This function writes to a register on the slave device. It does not do the typical read-write-modify sequence (future update), hence all bits of the register are overwritten. The function can only write a maximum of 4 bytes of data, excluding the slave and register address bytes. This is to conserve on memory but can be altered by the user.
 
