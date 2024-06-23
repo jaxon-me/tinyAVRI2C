@@ -32,11 +32,11 @@ This function reads the value of a register and stores the byte/s of in a buffer
 *: ```numBytes``` should not exceed the specific register size
 
 
-#Code explanation
+# Code explanation
 
 Calling ```begin()``` initialised the TWI peripheral, setting the baud rate, enabling interrupts, sets the microcontroller as host, and places the peripheral in IDLE mode. 
 
-Variables used to keep track of location in data transmission:
+** Variables used to keep track of location in data transmission: **
 
 ```stepz```: 0 when writing slave address packet, 1 when writing the register address, 2 when sending or receiving data bytes. 
 
@@ -47,6 +47,8 @@ Variables used to keep track of location in data transmission:
 ```res```: 0 means it's awaiting for a response, 1 means it successfully wrote/read all bytes to the slave, 2 means it received and NACK after sending slave data bytes (error), 3 means it missed an acknowledgement after sending slave address (error), 5 means it lost arbitration and 6 means it timed out without response. Call error cases are handled by stopping communication. 
 
 ```writing```: Boolean indicating whether it is writing to the slave or reading. 
+
+## writeRegister
 
 
 
