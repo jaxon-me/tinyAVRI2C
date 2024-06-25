@@ -1,3 +1,7 @@
+# Compatibility
+
+All Microchip tinyAVR boards. Traditional AVR boards such as the ATtiny85 are not compatible due to change of naming.
+
 This library allows I2C communication between a host tinyAVR microcontroller and a slave device. It sacrifices rigorous error handling and cross compatibility for memory improvements, suited for lower memory models. It has two pre-programmed functions: writeRegister and readRegister.
 
 ```writeRegister(uint8_t saddr, uint8_t regaddr, uint8_t* val, uint8_t sizeData)```

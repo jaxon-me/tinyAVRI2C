@@ -1,30 +1,28 @@
-﻿#include "I2CHex.h"
-#include "stdint.h"
+#include "tinyAVRI2C.h"
+#include <stdint.h>
 #include "Arduino.h"
-uint8_t wif = TWI0.MSTATUS & (1<<6) ;
-uint8_t rif = TWI0.MSTATUS & 0x80;
-uint8_t rxack = TWI0.MSTATUS & 0x10;
-uint8_t clkhold = TWI0.MSTATUS & 0x20;
-uint8_t arblost = TWI0.MSTATUS & 0x08;
-uint8_t buserr = (TWI0.MSTATUS & 0x04);
+#define wif (TWI0.MSTATUS & (1<<6))
+#define rif  (TWI0.MSTATUS & 0x80)
+#define rxack  (TWI0.MSTATUS & 0x10)
+#define clkhold (TWI0.MSTATUS & 0x20)
+
+
 
 I2CDevice I2CDev;
 
 //res: 1 -> done reading register bytes. 2-> recieved NACK from client after register byte sent. 3 -> missing ack when sending the address byte. 5-> lost arbitration, 6-> connection timeout
-ISR(TWI0_TWIM_vect){
-  	
-	if (wif && I2CDev.stepz == 0){
+ISR(TWI0_TWIM_vect){	
+  
+  if (wif && I2CDev.stepz == 0){
 		//if WIF set, and done transmitting the slave addr (address packet)
-   
-		if (clkhold && !rxack){
+    
+    TWI0.MSTATUS |= (1<<6); //clears WIF flag
+    if (clkhold && !rxack){
 			//Case M1, this is the place to be
       TWI0.MDATA = I2CDev.regAddr; //send reg address, auto clears WIF flag    
       I2CDev.stepz = 1; //signifies new thread for readRegister / writeRegister. Used in further if conditions for new code
       return;
 		}
-   
-    TWI0.MSTATUS |= (1<<6); //clears WIF flag
-    
 		else if (rxack){ //RXACK = 1
 			//M3
 			I2CDev.res = 3;
@@ -35,12 +33,15 @@ ISR(TWI0_TWIM_vect){
 			I2CDev.res = 5;
       return; //need to handle this properly. Wait for bus IDLE then send stop.   
 		}
+
+
 	}
   else if (wif && I2CDev.stepz == 1){ //wif set, in register transmission mode
     if (!rxack){
       //recieved ACK from slave
       if (!I2CDev.writing){
         uint8_t addrR = I2CDev.slaveAddr << 1 | 1;
+        
         TWI0.MADDR = addrR; //need to add interrupt for wif on stepz == 2 for lost arbitration etc (not M2); The only interrupt code after this for stepz == 2 is for when a byte has been sent, which is assuming transmission all good.
         I2CDev.stepz = 2;
         return;
@@ -54,7 +55,7 @@ ISR(TWI0_TWIM_vect){
           TWI0.MCTRLB |= 0x3; //STOP cmd
           I2CDev.res = 1; //all good, intended behaviour
         }
-        TWI0.MDATA = I2CDev.bufferData[I2CDev.byteWriteCount]; //sends byte of data, auto clears flag
+        TWI0.MDATA = I2CDev.dataWrite[I2CDev.byteWriteCount]; //sends byte of data, auto clears flag
         I2CDev.byteWriteCount++;
       }
     }
@@ -69,7 +70,8 @@ ISR(TWI0_TWIM_vect){
   else if (rif && I2CDev.stepz == 2){
     if (clkhold){
       //clk hold set, recieved byte of data from slave
-      I2CDev.bufferData[I2CDev.byteReadCount] = TWI0.MDATA; //auto clears RIF flag
+      PORTA.OUTTGL = (1<<5);
+      I2CDev.dataRead[I2CDev.byteReadCount] = TWI0.MDATA; //auto clears RIF flag
       I2CDev.byteReadCount++;
       if (I2CDev.byteReadCount == I2CDev.numberBytes){
         //send NACK
@@ -98,8 +100,14 @@ void I2CDevice::begin(){
 	sei();
 }
 
-void I2CDevice::writeReg(uint8_t saddr, uint8_t regaddr, uint8_t* val, uint8_t sizeData){
 
+void I2CDevice::setSlaveAddress(uint8_t saddr){
+  //re-defines I2C Slave Address
+  I2CDev.slaveAddr = saddr;
+}
+
+void I2CDevice::writeRegister(uint8_t regaddr, uint8_t* val, uint8_t sizeData){
+  memset(I2CDev.dataWrite, 0, sizeof(I2CDev.dataWrite));
   //vars to keep track
   I2CDev.stepz = 0;
   I2CDev.byteWriteCount = 0;
@@ -114,14 +122,15 @@ void I2CDevice::writeReg(uint8_t saddr, uint8_t regaddr, uint8_t* val, uint8_t s
   }
   else{
     for (uint8_t i = 0; i < sizeData; i++){
-      I2CDev.bufferData[i] = val[i]; //transfers data to be written
+      I2CDev.dataWrite[i] = val[i]; //transfers data to be written
     }
   }
-  TWI0.MADDR = (saddr << 1); //writes the host address (i2c slave address), inits the communication. DIR = 0
+
+  TWI0.MADDR = (I2CDev.slaveAddr << 1); //writes the host address (i2c slave address), inits the communication. DIR = 0
 
   while (!I2CDev.res){
     //waits for an interrupt
-    delay(500); //if it takes longer than 500ms to get a response then clearly something went wrong. 
+    delay(10); //if it takes longer than 10ms between interrupts, something went wrong.
     if (!I2CDev.res){
       I2CDev.res = 6; //returns error in the case it waits without response
     }
@@ -129,26 +138,64 @@ void I2CDevice::writeReg(uint8_t saddr, uint8_t regaddr, uint8_t* val, uint8_t s
 }
 
 
-void I2CDevice::readRegister(uint8_t saddr, uint8_t regaddr, uint8_t numBytes, uint8_t* buff){
+void I2CDevice::readRegister(uint8_t regaddr, uint8_t numBytes){
+  memset(I2CDev.dataRead, 0, sizeof(I2CDev.dataRead)); //clears dataRead ready for new
   I2CDev.stepz = 0;
   I2CDev.byteReadCount = 0;
   I2CDev.res = 0;
   I2CDev.writing = 0;
-	uint8_t maddr = 6 << 1; //R/!W set to zero, host writing
-  I2CDev.slaveAddr = saddr;
   I2CDev.regAddr = regaddr;
   I2CDev.numberBytes = numBytes;
-	TWI0.MADDR = maddr;
+
+	TWI0.MADDR = (I2CDev.slaveAddr << 1);
 	
 	while (!I2CDev.res){
-		delay(500);
-    I2CDev.res = 6; //connection error
+		delay(10);
+    if (!I2CDev.res){
+      I2CDev.res = 6; //connection error
+    }
 	}
+}
 
-  for (uint8_t i = 0; i <numBytes; i++){ //fix this, sizeof
-    buff[i] = I2CDev.bufferData[i];
+uint32_t I2CDevice::data32(bool lsb){
+  //lsb: 1 if I2C slave outputs least significant byte first
+  if (sizeof(I2CDev.dataRead) < 4){
+    return 0;
   }
-  
-	return;
+  uint32_t output;
+  if (lsb){
+    for (uint8_t i = 0; i < 4; i++){
+      output |= (uint32_t)(I2CDev.dataRead[i] << (i << 3));
+    }
+  }
+  else {
+    for (uint8_t i = 0; i < 4; i++){
+      output |= (uint32_t)(I2CDev.dataRead[3 ^ i] << (i << 3));
+    }
+  }
+
+  return output;
+
+}
+
+uint16_t I2CDevice::data16(bool lsb){
+  if (sizeof(I2CDev.dataRead) < 2){
+    return 0;
+  }
+
+  uint16_t output;
+
+  if (lsb){
+    for (uint8_t i = 0; i < 2; i++){
+      output |= (uint16_t)(I2CDev.dataRead[i] << (i << 3));
+    }
+  }
+  else {
+    for (uint8_t i = 0; i < 2; i++){
+      output |= (uint16_t)(I2CDev.dataRead[1 ^ i] << (i << 3));
+    }
+  }
+
+  return output;
 
 }

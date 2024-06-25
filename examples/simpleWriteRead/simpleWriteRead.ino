@@ -1,20 +1,19 @@
-
 //Copyright Jaxon Anthony
 //I2CDev.begin() initialises the TWI peripheral. readRegister requests and stores 2 bytes of data from a device with slave address of 0x48, register address 0x00, storing it in `data`. Likewise, writeReg writes 2 bytes from `data` to 0x02 rregister on the same device. 
 //refer to https://github.com/jaxon-me/tinyAVRI2C for more information.
-
-#include "I2CHex.h"
-
-uint8_t data[2];
+#include "tinyAVRI2C.h"
 void setup() {
   // put your setup code here, to run once:
   I2CDev.begin();
-    
+  I2CDev.setSlaveAddress(96);
+  Serial.begin(115200);
+  PORTA.DIRSET = (1<<5);
+  PORTA.OUTCLR = (1<<5);
 }
 
 void loop() {
-   I2CDev.readRegister(0x48, 0x00, 2, data);
-   delay(1000);
-   I2CDev.writeReg(0x48, 0x02, data, 2);
-   delay(1000);
+  I2CDev.readRegister(0x0F, 4);
+  uint32_t data = I2CDev.data32(1);
+  Serial.printHexln(data);
+  delay(1000);
 }
