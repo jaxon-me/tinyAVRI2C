@@ -1,18 +1,19 @@
 #include "tinyAVRI2C.h"
 #include <stdint.h>
 #include "Arduino.h"
+#include <avr/sleep.h>
 #define wif (TWI0.MSTATUS & (1<<6))
 #define rif  (TWI0.MSTATUS & 0x80)
 #define rxack  (TWI0.MSTATUS & 0x10)
 #define clkhold (TWI0.MSTATUS & 0x20)
-
+ 
 
 
 I2CDevice I2CDev;
 
-//res: 1 -> done reading register bytes. 2-> recieved NACK from client after register byte sent. 3 -> missing ack when sending the address byte. 5-> lost arbitration, 6-> connection timeout
+//res: 1 -> done reading register bytes. 2-> recieved NACK from client after register byte sent. 3 -> missing ack when sending the address byte. 5-> lost arbitration
 ISR(TWI0_TWIM_vect){	
-  
+
   if (wif && I2CDev.stepz == 0){
 		//if WIF set, and done transmitting the slave addr (address packet)
     
@@ -26,11 +27,12 @@ ISR(TWI0_TWIM_vect){
 		else if (rxack){ //RXACK = 1
 			//M3
 			I2CDev.res = 3;
-			TWI0.MCTRLB |= 0x3; //STOP cmd
+			TWI0.MCTRLB |= 0x03; //STOP cmd
 		}
 		else {
       //M4
 			I2CDev.res = 5;
+      TWI0.MSTATUS |= (1<<6); //manually clears int flags
       return; //need to handle this properly. Wait for bus IDLE then send stop.   
 		}
 
@@ -70,7 +72,7 @@ ISR(TWI0_TWIM_vect){
   else if (rif && I2CDev.stepz == 2){
     if (clkhold){
       //clk hold set, recieved byte of data from slave
-      PORTA.OUTTGL = (1<<5);
+      
       I2CDev.dataRead[I2CDev.byteReadCount] = TWI0.MDATA; //auto clears RIF flag
       I2CDev.byteReadCount++;
       if (I2CDev.byteReadCount == I2CDev.numberBytes){
@@ -89,6 +91,8 @@ ISR(TWI0_TWIM_vect){
 	
 }
 
+
+
 void I2CDevice::begin(){
   //TWI peripheral set up, sits idle in meantime
 	TWI0.MBAUD = 20; //sets baud
@@ -97,6 +101,10 @@ void I2CDevice::begin(){
 	TWI0.MCTRLA |= (1<<6) | (1<<7); //enabling WIF/RIF interrupts
   I2CDev.stepz = 0;
   I2CDev.byteReadCount = 0;
+
+  //timeout
+
+
 	sei();
 }
 
@@ -116,8 +124,8 @@ void I2CDevice::writeRegister(uint8_t regaddr, uint8_t* val, uint8_t sizeData){
 
   I2CDev.regAddr = regaddr;
   I2CDev.numberBytes = sizeData;
-  if ((sizeData-1) >> 2){
-    //only accepts 4 bytes of data (32 bit). Memory constrained, can be increased if you want. 
+  if ((sizeData-1) >> 5){
+    //only accepts 32 bytes of data (32 bit). Memory constrained, can be increased if you want. 
     return;
   }
   else{
@@ -130,10 +138,14 @@ void I2CDevice::writeRegister(uint8_t regaddr, uint8_t* val, uint8_t sizeData){
 
   while (!I2CDev.res){
     //waits for an interrupt
-    delay(10); //if it takes longer than 10ms between interrupts, something went wrong.
-    if (!I2CDev.res){
-      I2CDev.res = 6; //returns error in the case it waits without response
+    set_sleep_mode(SLEEP_MODE_IDLE);
+    sleep_enable();
+    sleep_cpu();
+    if (I2CDev.res == 5){
+      //wait until bus idle before moving on
+      while ((TWI0.MSTATUS & 0x03) != 0x01);
     }
+    
   }
 }
 
@@ -150,10 +162,15 @@ void I2CDevice::readRegister(uint8_t regaddr, uint8_t numBytes){
 	TWI0.MADDR = (I2CDev.slaveAddr << 1);
 	
 	while (!I2CDev.res){
-		delay(10);
-    if (!I2CDev.res){
-      I2CDev.res = 6; //connection error
+		//idle sleep
+    set_sleep_mode(SLEEP_MODE_IDLE);
+    sleep_enable();
+    sleep_cpu();
+    if (I2CDev.res == 5){
+      //wait until bus idle before moving on
+      while ((TWI0.MSTATUS & 0x03) != 0x01);
     }
+    
 	}
 }
 
@@ -199,3 +216,5 @@ uint16_t I2CDevice::data16(bool lsb){
   return output;
 
 }
+
+

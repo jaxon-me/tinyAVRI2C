@@ -1,5 +1,7 @@
 #include <stdint.h> 
 
+#ifndef tinyAVRI2C_H
+#define tinyAVRI2C_H
 class I2CDevice {
   
 	    
@@ -18,12 +20,16 @@ class I2CDevice {
     uint8_t numberBytes;
     uint8_t regAddr;
     uint8_t dataRead[4];
-    uint8_t dataWrite[4];
+    uint8_t dataWrite[32];
     uint8_t byteWriteCount;
     uint8_t writing;
     uint8_t slaveAddr;
 
 
 };
-
 extern I2CDevice I2CDev;
+
+
+#endif
+
+
